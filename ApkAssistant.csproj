@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ApkAssistant</RootNamespace>
+    <AssemblyName>ApkAssistant</AssemblyName>
+    <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ApkAssistant.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="ApkAssistant.Tests/**/*.cs" />
+  </ItemGroup>
+
+</Project>
