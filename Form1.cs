@@ -29,6 +29,9 @@ public class Form1 : Form
     private TextBox txtKeywords = null!;
     private Button btnSearch = null!;
     private DataGridView dgvResults = null!;
+    private CheckBox chkScanVpn = null!;
+    private CheckBox chkScanPinning = null!;
+    private Button btnKnownScan = null!;
     private TextBox txtApktoolPath = null!;
     private TextBox txtJadxPath = null!;
     private TextBox txtApksignerPath = null!;
@@ -225,11 +228,12 @@ public class Form1 : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 2,
+            RowCount = 3,
             Padding = new Padding(12)
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
@@ -241,6 +245,23 @@ public class Form1 : Form
         };
         btnSearch = new Button { Text = "Ara", Dock = DockStyle.Fill };
         btnSearch.Click += BtnSearch_Click;
+
+        // --- Bilinen kalıp taraması: yalnızca elle incelemek için aday
+        // konum listeler, hiçbir dosyayı değiştirmez. ---
+        var knownScanPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false
+        };
+        chkScanVpn = new CheckBox { Text = "VPN Tespiti kalıpları", AutoSize = true, Checked = true, Margin = new Padding(0, 6, 16, 0) };
+        chkScanPinning = new CheckBox { Text = "SSL Pinning kalıpları", AutoSize = true, Checked = true, Margin = new Padding(0, 6, 16, 0) };
+        knownScanPanel.Controls.Add(chkScanVpn);
+        knownScanPanel.Controls.Add(chkScanPinning);
+
+        btnKnownScan = new Button { Text = "Bilinen Kalıpları Tara (salt okunur)", Dock = DockStyle.Fill };
+        btnKnownScan.Click += BtnKnownScan_Click;
 
         dgvResults = new DataGridView
         {
@@ -254,10 +275,13 @@ public class Form1 : Form
         dgvResults.Columns.Add("LineNumber", "Satır");
         dgvResults.Columns.Add("Match", "Eşleşen");
         dgvResults.Columns.Add("LineContent", "İçerik");
+        dgvResults.Columns.Add("Category", "Kategori / Etiket");
 
         layout.Controls.Add(txtKeywords, 0, 0);
         layout.Controls.Add(btnSearch, 1, 0);
-        layout.Controls.Add(dgvResults, 0, 1);
+        layout.Controls.Add(knownScanPanel, 0, 1);
+        layout.Controls.Add(btnKnownScan, 1, 1);
+        layout.Controls.Add(dgvResults, 0, 2);
         layout.SetColumnSpan(dgvResults, 2);
         tabSearch.Controls.Add(layout);
     }
@@ -750,7 +774,7 @@ public class Form1 : Form
             try
             {
                 foreach (var r in results)
-                    dgvResults.Rows.Add(r.FilePath, r.LineNumber, r.Match, r.LineContent);
+                    dgvResults.Rows.Add(r.FilePath, r.LineNumber, r.Match, r.LineContent, "");
             }
             finally
             {
@@ -759,6 +783,51 @@ public class Form1 : Form
 
             AppendLog($"{results.Count} sonuç bulundu.", LogLevel.Success);
         }, "Kod taraması");
+    }
+
+    private async void BtnKnownScan_Click(object? sender, EventArgs e)
+    {
+        var rootDir = txtOutputDir.Text.Trim();
+        if (string.IsNullOrEmpty(rootDir) || !Directory.Exists(rootDir))
+        {
+            AppendLog("Önce geçerli bir çıktı klasörü belirleyin (tarama için).", LogLevel.Warning);
+            return;
+        }
+
+        bool includeVpn = chkScanVpn.Checked;
+        bool includePinning = chkScanPinning.Checked;
+        if (!includeVpn && !includePinning)
+        {
+            AppendLog("En az bir kategori seçmelisiniz: VPN Tespiti veya SSL Pinning.", LogLevel.Warning);
+            return;
+        }
+
+        dgvResults.Rows.Clear();
+
+        AppendLog(
+            "Bilinen kalıp taraması salt okunurdur: hiçbir dosyayı değiştirmez, " +
+            "yalnızca elle incelenmesi gereken aday satırları listeler. " +
+            "Her bulguyu kendiniz değerlendirip karar vermeniz gerekir.",
+            LogLevel.Info);
+
+        await RunBusyAsync(async ct =>
+        {
+            var scanner = new KnownPatternScanner();
+            var hits = await scanner.ScanAsync(rootDir, includeVpn, includePinning, CreateProgress(), ct);
+
+            dgvResults.SuspendLayout();
+            try
+            {
+                foreach (var h in hits)
+                    dgvResults.Rows.Add(h.FilePath, h.LineNumber, h.Match, h.LineContent, $"{h.Category}: {h.Label}");
+            }
+            finally
+            {
+                dgvResults.ResumeLayout();
+            }
+
+            AppendLog($"{hits.Count} aday satır bulundu (yalnızca inceleme için).", LogLevel.Success);
+        }, "Bilinen kalıp taraması");
     }
 
     // ------------------------------------------------------------ Adım 4: Patching
