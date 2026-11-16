@@ -35,9 +35,37 @@ public class Form1 : Form
     private TextBox txtApktoolPath = null!;
     private TextBox txtJadxPath = null!;
     private TextBox txtApksignerPath = null!;
+    private TextBox txtAdbPath = null!;
     private Button btnBrowseApktool = null!;
     private Button btnBrowseJadx = null!;
     private Button btnBrowseApksigner = null!;
+    private Button btnBrowseAdb = null!;
+
+    // Automation tab
+    private TabPage tabAutomation = null!;
+    private CheckBox chkAutoApplyNsc = null!;
+    private CheckBox chkAutoAdbInstall = null!;
+    private TextBox txtAutoDeviceSerial = null!;
+    private Button btnFullAutomation = null!;
+
+    // Logcat tab
+    private TabPage tabLogcat = null!;
+    private TextBox txtLogcatDeviceSerial = null!;
+    private TextBox txtLogcatFilter = null!;
+    private Button btnLogcatStart = null!;
+    private Button btnLogcatStop = null!;
+    private Button btnLogcatClear = null!;
+    private RichTextBox rtbLogcat = null!;
+
+    // Diff tab
+    private TabPage tabDiff = null!;
+    private TextBox txtDiffLeft = null!;
+    private TextBox txtDiffRight = null!;
+    private Button btnDiffLeftBrowse = null!;
+    private Button btnDiffRightBrowse = null!;
+    private Button btnDiffCompare = null!;
+    private DataGridView dgvDiffResults = null!;
+    private TextBox txtDiffDetail = null!;
 
     // Patching tab
     private TabPage tabPatch = null!;
@@ -114,30 +142,33 @@ public class Form1 : Form
         // Bottom: tool paths (settings)
         var toolsPanel = new GroupBox
         {
-            Text = "Araç Yolları (Ayarlar)",
+            Text = "Araç Yolları (Ayarlar — oturumlar arası kalıcıdır)",
             Dock = DockStyle.Bottom,
-            Height = 130,
+            Height = 170,
             Padding = new Padding(8)
         };
         var toolsLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 3
+            RowCount = 4
         };
         toolsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         toolsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         toolsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-        for (int i = 0; i < 3; i++)
-            toolsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f));
+        for (int i = 0; i < 4; i++)
+            toolsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
 
         (txtApktoolPath, btnBrowseApktool) = CreateToolRow(toolsLayout, 0, "apktool (.bat/.jar):");
         (txtJadxPath, btnBrowseJadx) = CreateToolRow(toolsLayout, 1, "jadx-cli (.bat/.exe):");
         (txtApksignerPath, btnBrowseApksigner) = CreateToolRow(toolsLayout, 2, "apksigner (.bat/.exe):");
+        (txtAdbPath, btnBrowseAdb) = CreateToolRow(toolsLayout, 3, "adb (.exe, ops.):");
 
         btnBrowseApktool.Click += (_, _) => BrowseToolFile(txtApktoolPath, "apktool|apktool*.*;*.jar|Tüm dosyalar|*.*");
         btnBrowseJadx.Click += (_, _) => BrowseToolFile(txtJadxPath, "jadx|jadx*.*|Tüm dosyalar|*.*");
         btnBrowseApksigner.Click += (_, _) => BrowseToolFile(txtApksignerPath, "apksigner|apksigner*.*|Tüm dosyalar|*.*");
+        btnBrowseAdb.Click += (_, _) => BrowseToolFile(txtAdbPath, "adb|adb*.*|Tüm dosyalar|*.*");
+        txtAdbPath.PlaceholderText = "boş bırakılırsa PATH üzerinden 'adb' aranır";
         toolsPanel.Controls.Add(toolsLayout);
 
         // Middle: tabs
@@ -147,16 +178,25 @@ public class Form1 : Form
         tabLogs = new TabPage("Logs");
         tabPatch = new TabPage("Patching");
         tabSign = new TabPage("Signing");
+        tabAutomation = new TabPage("Otomasyon");
+        tabLogcat = new TabPage("Logcat");
+        tabDiff = new TabPage("Diff");
         BuildDecompileTab();
         BuildSearchTab();
         BuildLogsTab();
         BuildPatchTab();
         BuildSignTab();
+        BuildAutomationTab();
+        BuildLogcatTab();
+        BuildDiffTab();
         tabMain.TabPages.Add(tabDecompile);
         tabMain.TabPages.Add(tabSearch);
         tabMain.TabPages.Add(tabLogs);
         tabMain.TabPages.Add(tabPatch);
         tabMain.TabPages.Add(tabSign);
+        tabMain.TabPages.Add(tabAutomation);
+        tabMain.TabPages.Add(tabLogcat);
+        tabMain.TabPages.Add(tabDiff);
 
         // Dock sırası: Fill önce, kenar panelleri sonra
         Controls.Add(tabMain);
@@ -516,6 +556,217 @@ public class Form1 : Form
         tabSign.Controls.Add(root);
     }
 
+    private void BuildAutomationTab()
+    {
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 5,
+            Padding = new Padding(12)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var info = new Label
+        {
+            Text =
+                "Tam otomasyon: Decompile (apktool) → (opsiyonel) network_security_config yaması → " +
+                "Recompile → Zipalign + İmzala + Doğrula → (opsiyonel) adb install.\n" +
+                "Üstteki APK yolu / Araç Yolları ve Signing sekmesindeki keystore bilgileri kullanılır.",
+            Dock = DockStyle.Fill,
+            AutoSize = false
+        };
+        layout.Controls.Add(info, 0, 0);
+        layout.SetColumnSpan(info, 2);
+
+        chkAutoApplyNsc = new CheckBox
+        {
+            Text = "network_security_config.xml bulunursa yamayı uygula",
+            AutoSize = true,
+            Checked = true
+        };
+        layout.Controls.Add(chkAutoApplyNsc, 0, 1);
+        layout.SetColumnSpan(chkAutoApplyNsc, 2);
+
+        chkAutoAdbInstall = new CheckBox
+        {
+            Text = "İmzalama sonrası adb ile bağlı cihaza/emülatöre yükle",
+            AutoSize = true,
+            Checked = false
+        };
+        layout.Controls.Add(chkAutoAdbInstall, 0, 2);
+        layout.SetColumnSpan(chkAutoAdbInstall, 2);
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Cihaz Seri No (ops.):",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Dock = DockStyle.Fill
+        }, 0, 3);
+        txtAutoDeviceSerial = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            PlaceholderText = "örn. emulator-5554 — boş bırakılırsa tek bağlı cihaz kullanılır"
+        };
+        layout.Controls.Add(txtAutoDeviceSerial, 1, 3);
+
+        btnFullAutomation = new Button
+        {
+            Text = "▶ Tam Otomasyonu Başlat (Decompile → Patch → Recompile → İmzala → [Yükle])",
+            Dock = DockStyle.Fill
+        };
+        btnFullAutomation.Click += BtnFullAutomation_Click;
+        layout.Controls.Add(btnFullAutomation, 0, 4);
+        layout.SetColumnSpan(btnFullAutomation, 2);
+
+        tabAutomation.Controls.Add(layout);
+    }
+
+    private void BuildLogcatTab()
+    {
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 4,
+            RowCount = 2,
+            Padding = new Padding(8)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var topPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        topPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+        topPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+
+        txtLogcatDeviceSerial = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "Cihaz Seri No (ops.)" };
+        txtLogcatFilter = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "adb logcat filtresi (ops., örn. MyApp:D *:S)" };
+        topPanel.Controls.Add(txtLogcatDeviceSerial, 0, 0);
+        topPanel.Controls.Add(txtLogcatFilter, 1, 0);
+
+        btnLogcatStart = new Button { Text = "Başlat", Dock = DockStyle.Fill };
+        btnLogcatStart.Click += BtnLogcatStart_Click;
+        btnLogcatStop = new Button { Text = "Durdur", Dock = DockStyle.Fill, Enabled = false };
+        btnLogcatStop.Click += BtnLogcatStop_Click;
+        btnLogcatClear = new Button { Text = "Temizle", Dock = DockStyle.Fill };
+        btnLogcatClear.Click += (_, _) => rtbLogcat.Clear();
+
+        rtbLogcat = new RichTextBox
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            BackColor = Color.Black,
+            ForeColor = Color.LightGreen,
+            Font = new Font("Consolas", 9f),
+            WordWrap = false,
+            HideSelection = false
+        };
+
+        layout.Controls.Add(topPanel, 0, 0);
+        layout.Controls.Add(btnLogcatStart, 1, 0);
+        layout.Controls.Add(btnLogcatStop, 2, 0);
+        layout.Controls.Add(btnLogcatClear, 3, 0);
+        layout.Controls.Add(rtbLogcat, 0, 1);
+        layout.SetColumnSpan(rtbLogcat, 4);
+
+        tabLogcat.Controls.Add(layout);
+    }
+
+    private void BuildDiffTab()
+    {
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 4,
+            Padding = new Padding(12)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Sol Klasör (eski):",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Dock = DockStyle.Fill
+        }, 0, 0);
+        txtDiffLeft = new TextBox { Dock = DockStyle.Fill };
+        btnDiffLeftBrowse = new Button { Text = "Gözat...", Dock = DockStyle.Fill };
+        btnDiffLeftBrowse.Click += (_, _) => BrowseFolderInto(txtDiffLeft);
+        layout.Controls.Add(txtDiffLeft, 1, 0);
+        layout.Controls.Add(btnDiffLeftBrowse, 2, 0);
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Sağ Klasör (yeni):",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Dock = DockStyle.Fill
+        }, 0, 1);
+        txtDiffRight = new TextBox { Dock = DockStyle.Fill };
+        btnDiffRightBrowse = new Button { Text = "Gözat...", Dock = DockStyle.Fill };
+        btnDiffRightBrowse.Click += (_, _) => BrowseFolderInto(txtDiffRight);
+        layout.Controls.Add(txtDiffRight, 1, 1);
+        layout.Controls.Add(btnDiffRightBrowse, 2, 1);
+
+        dgvDiffResults = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            MultiSelect = false
+        };
+        dgvDiffResults.Columns.Add("RelativePath", "Dosya (göreli yol)");
+        dgvDiffResults.Columns.Add("Status", "Durum");
+        dgvDiffResults.SelectionChanged += DgvDiffResults_SelectionChanged;
+
+        btnDiffCompare = new Button { Text = "Karşılaştır", Dock = DockStyle.Fill };
+        btnDiffCompare.Click += BtnDiffCompare_Click;
+        layout.Controls.Add(btnDiffCompare, 0, 2);
+        layout.Controls.Add(dgvDiffResults, 1, 2);
+        layout.SetColumnSpan(dgvDiffResults, 2);
+
+        txtDiffDetail = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Both,
+            Font = new Font("Consolas", 9f),
+            WordWrap = false
+        };
+        layout.Controls.Add(txtDiffDetail, 0, 3);
+        layout.SetColumnSpan(txtDiffDetail, 3);
+
+        tabDiff.Controls.Add(layout);
+    }
+
+    private void BrowseFolderInto(TextBox target)
+    {
+        using var dlg = new FolderBrowserDialog
+        {
+            Description = "Klasör seçin",
+            UseDescriptionForTitle = true
+        };
+        if (dlg.ShowDialog(this) == DialogResult.OK)
+            target.Text = dlg.SelectedPath;
+    }
+
     // ------------------------------------------------------------ Logging
     private void AppendLog(string message, LogLevel level = LogLevel.Info)
     {
@@ -599,6 +850,14 @@ public class Form1 : Form
         btnBrowseKeystore.Enabled = !busy;
         btnCreateDebugKeystore.Enabled = !busy;
         btnSignAndVerify.Enabled = !busy;
+        btnKnownScan.Enabled = !busy;
+        btnBrowseAdb.Enabled = !busy;
+        btnFullAutomation.Enabled = !busy;
+        btnDiffCompare.Enabled = !busy;
+        btnDiffLeftBrowse.Enabled = !busy;
+        btnDiffRightBrowse.Enabled = !busy;
+        btnLogcatStart.Enabled = !busy;
+        btnLogcatStop.Enabled = busy;
         btnCancel.Enabled = busy;
     }
 
@@ -660,7 +919,8 @@ public class Form1 : Form
     private ApkManager CreateApkManager() => new(
         apktoolPath:   txtApktoolPath.Text.Trim(),
         jadxPath:      txtJadxPath.Text.Trim(),
-        apksignerPath: txtApksignerPath.Text.Trim());
+        apksignerPath: txtApksignerPath.Text.Trim(),
+        adbPath:       txtAdbPath.Text.Trim());
 
     /// <summary>Arka plan satırlarını UI thread'ine taşıyıp loga yazar (Progress&lt;T&gt; SyncContext yakalar).</summary>
     private IProgress<string> CreateProgress() =>
@@ -1057,10 +1317,255 @@ public class Form1 : Form
         }
     }
 
+    // ------------------------------------------------------------ Otomasyon (tek buton)
+    private async void BtnFullAutomation_Click(object? sender, EventArgs e)
+    {
+        if (!ValidateApkPath()) return;
+        if (!ValidateToolPath(txtApktoolPath.Text.Trim(), "apktool")) return;
+        if (!ValidateToolPath(txtApksignerPath.Text.Trim(), "apksigner")) return;
+        if (chkSignUseZipalign.Checked && !ValidateToolPath(txtZipalignPath.Text.Trim(), "zipalign")) return;
+
+        var ksPath = txtKeystorePath.Text.Trim();
+        if (!File.Exists(ksPath))
+        {
+            AppendLog(
+                "Keystore bulunamadı. Önce Signing sekmesinden 'Debug Üret' ile oluşturun ya da kendi keystore'unuzu seçin.",
+                LogLevel.Warning);
+            return;
+        }
+
+        var apk = txtApkPath.Text.Trim();
+        var outDir = string.IsNullOrWhiteSpace(txtOutputDir.Text)
+            ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(apk))!, Path.GetFileNameWithoutExtension(apk) + "_auto")
+            : txtOutputDir.Text.Trim();
+
+        var alias = txtKeystoreAlias.Text.Trim();
+        var storePass = txtKeystoreStorePass.Text;
+        var keyPass = txtKeystoreKeyPass.Text;
+        bool applyNsc = chkAutoApplyNsc.Checked;
+        bool doInstall = chkAutoAdbInstall.Checked;
+        var serial = txtAutoDeviceSerial.Text.Trim();
+
+        await RunBusyAsync(async ct =>
+        {
+            var apkMgr = CreateApkManager();
+
+            AppendLog("[1/5] Decompile (apktool)...", LogLevel.Info);
+            await apkMgr.DecompileApkToolAsync(apk, outDir, CreateProgress(), ct);
+
+            if (applyNsc)
+            {
+                var nsc = FindNetworkSecurityConfig(outDir);
+                if (nsc != null)
+                {
+                    AppendLog("[2/5] network_security_config.xml yaması uygulanıyor: " + nsc, LogLevel.Info);
+                    var pm = new PatchManager();
+                    var patchResult = await pm.PatchNetworkSecurityConfigAsync(nsc, ct);
+                    AppendLog($"Yama: {patchResult.ChangesMade} değişiklik — {patchResult.Summary}", LogLevel.Info);
+                }
+                else
+                {
+                    AppendLog("[2/5] network_security_config.xml bulunamadı, atlanıyor.", LogLevel.Warning);
+                }
+            }
+            else
+            {
+                AppendLog("[2/5] NSC yaması devre dışı bırakıldı (seçenek kapalı).", LogLevel.Debug);
+            }
+
+            var outputApk = Path.GetFullPath(Path.Combine(
+                outDir, "..", Path.GetFileNameWithoutExtension(apk) + "_recompiled.apk"));
+            AppendLog("[3/5] Recompile (apktool)...", LogLevel.Info);
+            await apkMgr.RecompileApkAsync(outDir, outputApk, CreateProgress(), ct);
+            if (!File.Exists(outputApk))
+                throw new InvalidOperationException("Yeniden derleme çıktısı oluşmadı.");
+
+            AppendLog("[4/5] Zipalign + İmzala + Doğrula...", LogLevel.Info);
+            var signer = new Signer(
+                zipalignPath: txtZipalignPath.Text.Trim(),
+                apksignerPath: txtApksignerPath.Text.Trim(),
+                keytoolPath: txtKeytoolPath.Text.Trim());
+
+            string signingTarget = outputApk;
+            if (chkSignUseZipalign.Checked)
+            {
+                var aligned = Path.Combine(
+                    Path.GetDirectoryName(outputApk)!, Path.GetFileNameWithoutExtension(outputApk) + "_aligned.apk");
+                await signer.ZipalignAsync(outputApk, aligned, CreateProgress(), ct);
+                if (!File.Exists(aligned))
+                    throw new InvalidOperationException("zipalign çıktısı oluşmadı.");
+                signingTarget = aligned;
+            }
+
+            await signer.SignAsync(signingTarget, ksPath, alias, storePass, keyPass, CreateProgress(), ct);
+            var verify = await signer.VerifyAsync(signingTarget, CreateProgress(), ct);
+            if (!verify.IsVerified)
+                throw new InvalidOperationException("İmza doğrulanamadı — apksigner çıktısını inceleyin.");
+            AppendLog($"✓ İmzalı APK: {signingTarget}", LogLevel.Success);
+
+            if (doInstall)
+            {
+                AppendLog("[5/5] adb install...", LogLevel.Info);
+                await apkMgr.AdbInstallAsync(
+                    signingTarget, string.IsNullOrEmpty(serial) ? null : serial,
+                    replaceExisting: true, CreateProgress(), ct);
+                AppendLog("✓ Cihaza/emülatöre yüklendi.", LogLevel.Success);
+            }
+            else
+            {
+                AppendLog("[5/5] adb install devre dışı bırakıldı (seçenek kapalı).", LogLevel.Debug);
+            }
+        }, "Tam Otomasyon");
+    }
+
+    private static string? FindNetworkSecurityConfig(string root)
+    {
+        try
+        {
+            var candidates = Directory.GetFiles(root, "network_security_config.xml", SearchOption.AllDirectories);
+            return candidates.Length > 0 ? candidates[0] : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ------------------------------------------------------------ ADB Logcat
+    private async void BtnLogcatStart_Click(object? sender, EventArgs e)
+    {
+        var serial = txtLogcatDeviceSerial.Text.Trim();
+        var filterText = txtLogcatFilter.Text.Trim();
+        var extraArgs = filterText.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        await RunBusyAsync(async ct =>
+        {
+            var apkMgr = CreateApkManager();
+            var progress = new Progress<string>(AppendLogcatLine);
+            await apkMgr.RunLogcatAsync(string.IsNullOrEmpty(serial) ? null : serial, extraArgs, progress, ct);
+        }, "ADB Logcat");
+    }
+
+    private void BtnLogcatStop_Click(object? sender, EventArgs e) => BtnCancel_Click(sender, e);
+
+    private void AppendLogcatLine(string line)
+    {
+        if (rtbLogcat.InvokeRequired)
+        {
+            rtbLogcat.BeginInvoke(new Action(() => AppendLogcatLine(line)));
+            return;
+        }
+
+        rtbLogcat.AppendText(line + Environment.NewLine);
+
+        const int maxLines = 5000;
+        const int keepLines = 3000;
+        if (rtbLogcat.Lines.Length > maxLines)
+            rtbLogcat.Lines = rtbLogcat.Lines.Skip(rtbLogcat.Lines.Length - keepLines).ToArray();
+
+        rtbLogcat.SelectionStart = rtbLogcat.TextLength;
+        rtbLogcat.ScrollToCaret();
+    }
+
+    // ------------------------------------------------------------ Diff modu
+    private async void BtnDiffCompare_Click(object? sender, EventArgs e)
+    {
+        var left = txtDiffLeft.Text.Trim();
+        var right = txtDiffRight.Text.Trim();
+        if (string.IsNullOrEmpty(left) || !Directory.Exists(left))
+        {
+            AppendLog("Sol klasör geçersiz.", LogLevel.Warning);
+            return;
+        }
+        if (string.IsNullOrEmpty(right) || !Directory.Exists(right))
+        {
+            AppendLog("Sağ klasör geçersiz.", LogLevel.Warning);
+            return;
+        }
+
+        dgvDiffResults.Rows.Clear();
+        txtDiffDetail.Text = "";
+
+        await RunBusyAsync(async ct =>
+        {
+            var dm = new DiffManager();
+            var entries = await dm.CompareDirectoriesAsync(left, right, ct);
+
+            dgvDiffResults.SuspendLayout();
+            try
+            {
+                foreach (var entry in entries.OrderBy(x => x.RelativePath, StringComparer.OrdinalIgnoreCase))
+                    dgvDiffResults.Rows.Add(entry.RelativePath, StatusText(entry.Status));
+            }
+            finally
+            {
+                dgvDiffResults.ResumeLayout();
+            }
+
+            AppendLog($"{entries.Count} farklı dosya bulundu.", LogLevel.Success);
+        }, "Klasör karşılaştırma");
+    }
+
+    private static string StatusText(DiffStatus status) => status switch
+    {
+        DiffStatus.Added => "Eklendi (sadece sağda)",
+        DiffStatus.Removed => "Silindi (sadece solda)",
+        DiffStatus.Modified => "Değişti",
+        _ => status.ToString()
+    };
+
+    private void DgvDiffResults_SelectionChanged(object? sender, EventArgs e)
+    {
+        if (dgvDiffResults.SelectedRows.Count == 0)
+        {
+            txtDiffDetail.Text = "";
+            return;
+        }
+
+        var row = dgvDiffResults.SelectedRows[0];
+        var rel = (string)row.Cells[0].Value!;
+        var statusText = (string)row.Cells[1].Value!;
+
+        if (!statusText.StartsWith("Değişti", StringComparison.Ordinal))
+        {
+            txtDiffDetail.Text =
+                $"({statusText} — satır bazlı fark yalnızca 'Değişti' durumundaki dosyalar için gösterilir.)";
+            return;
+        }
+
+        var left = txtDiffLeft.Text.Trim();
+        var right = txtDiffRight.Text.Trim();
+        var leftFile = Path.Combine(left, rel.Replace('/', Path.DirectorySeparatorChar));
+        var rightFile = Path.Combine(right, rel.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(leftFile) || !File.Exists(rightFile))
+        {
+            txtDiffDetail.Text = "(Dosyalardan biri artık bulunamıyor.)";
+            return;
+        }
+
+        if (DiffManager.LooksLikeBinary(leftFile) || DiffManager.LooksLikeBinary(rightFile))
+        {
+            txtDiffDetail.Text = "(İkili dosya — satır bazlı fark gösterilmiyor.)";
+            return;
+        }
+
+        try
+        {
+            var dm = new DiffManager();
+            txtDiffDetail.Text = dm.BuildLineDiff(leftFile, rightFile);
+        }
+        catch (Exception ex)
+        {
+            txtDiffDetail.Text = "(Fark gösterilemedi: " + ex.Message + ")";
+        }
+    }
+
     // ------------------------------------------------------------ Lifecycle
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadSettings();
         AppendLog("Uygulama hazır.", LogLevel.Info);
         AppendLog("Renk testi: uyarı mesajı.", LogLevel.Warning);
         AppendLog("Renk testi: hata mesajı.", LogLevel.Error);
@@ -1069,7 +1574,53 @@ public class Form1 : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        SaveSettings();
         _globalCts.Cancel();
         base.OnFormClosing(e);
+    }
+
+    private void LoadSettings()
+    {
+        try
+        {
+            var path = SettingsManager.GetDefaultPath();
+            var settings = SettingsManager.Load(path);
+            txtApktoolPath.Text = settings.ApktoolPath;
+            txtJadxPath.Text = settings.JadxPath;
+            txtApksignerPath.Text = settings.ApksignerPath;
+            txtZipalignPath.Text = settings.ZipalignPath;
+            txtKeytoolPath.Text = settings.KeytoolPath;
+            txtAdbPath.Text = settings.AdbPath;
+            if (!string.IsNullOrEmpty(settings.LastApkPath)) txtApkPath.Text = settings.LastApkPath;
+            if (!string.IsNullOrEmpty(settings.LastOutputDir)) txtOutputDir.Text = settings.LastOutputDir;
+            AppendLog("Ayarlar yüklendi: " + path, LogLevel.Debug);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Ayarlar yüklenemedi: " + ex.Message, LogLevel.Warning);
+        }
+    }
+
+    private void SaveSettings()
+    {
+        try
+        {
+            var settings = new AppSettings
+            {
+                ApktoolPath = txtApktoolPath.Text.Trim(),
+                JadxPath = txtJadxPath.Text.Trim(),
+                ApksignerPath = txtApksignerPath.Text.Trim(),
+                ZipalignPath = txtZipalignPath.Text.Trim(),
+                KeytoolPath = txtKeytoolPath.Text.Trim(),
+                AdbPath = txtAdbPath.Text.Trim(),
+                LastApkPath = txtApkPath.Text.Trim(),
+                LastOutputDir = txtOutputDir.Text.Trim()
+            };
+            SettingsManager.Save(settings, SettingsManager.GetDefaultPath());
+        }
+        catch
+        {
+            // Ayar kaydı başarısız olsa bile kapanışı engellememeli.
+        }
     }
 }

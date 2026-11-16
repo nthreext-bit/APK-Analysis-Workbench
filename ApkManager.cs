@@ -22,17 +22,20 @@ public class ApkManager
     public string JadxPath      { get; set; }
     public string ApksignerPath { get; set; }
     public string JavaPath      { get; set; }
+    public string AdbPath       { get; set; }
 
     public ApkManager(
         string? apktoolPath = null,
         string? jadxPath = null,
         string? apksignerPath = null,
-        string? javaPath = null)
+        string? javaPath = null,
+        string? adbPath = null)
     {
         ApktoolPath   = apktoolPath   ?? "";
         JadxPath      = jadxPath      ?? "";
         ApksignerPath = apksignerPath ?? "";
         JavaPath      = string.IsNullOrWhiteSpace(javaPath) ? "java" : javaPath;
+        AdbPath       = string.IsNullOrWhiteSpace(adbPath)  ? "adb"  : adbPath;
     }
 
     // ================= Public API =================
@@ -63,6 +66,74 @@ public class ApkManager
         ValidateTool(ApktoolPath, "apktool");
         var args = new[] { "b", sourceDir, "-o", outputApkPath };
         return RunToolAsync(ApktoolPath, args, onOutput, ct);
+    }
+
+    /// <summary>
+    /// 'adb install -r' ile bağlı cihaza/emülatöre APK yükler. deviceSerial
+    /// verilirse 'adb -s &lt;serial&gt; install ...' kullanılır (birden fazla cihaz
+    /// bağlıysa gereklidir).
+    /// </summary>
+    public Task<int> AdbInstallAsync(
+        string apkPath, string? deviceSerial, bool replaceExisting,
+        IProgress<string>? onOutput, CancellationToken ct)
+    {
+        ValidateFile(apkPath, "apkPath");
+        ValidateAdbPath(AdbPath);
+
+        var args = new List<string>();
+        if (!string.IsNullOrWhiteSpace(deviceSerial))
+        {
+            args.Add("-s");
+            args.Add(deviceSerial);
+        }
+        args.Add("install");
+        if (replaceExisting) args.Add("-r");
+        args.Add(apkPath);
+
+        return RunToolAsync(AdbPath, args, onOutput, ct);
+    }
+
+    /// <summary>
+    /// 'adb logcat' çıktısını canlı olarak akıtır. Süreç kendiliğinden bitmez;
+    /// durdurmak için ct iptal edilmelidir (bu da süreci sonlandırır ve
+    /// OperationCanceledException fırlatılmasına yol açar — bu normaldir).
+    /// </summary>
+    public Task<int> RunLogcatAsync(
+        string? deviceSerial, IEnumerable<string>? extraArgs,
+        IProgress<string>? onOutput, CancellationToken ct)
+    {
+        ValidateAdbPath(AdbPath);
+
+        var args = new List<string>();
+        if (!string.IsNullOrWhiteSpace(deviceSerial))
+        {
+            args.Add("-s");
+            args.Add(deviceSerial);
+        }
+        args.Add("logcat");
+        if (extraArgs != null) args.AddRange(extraArgs);
+
+        return RunToolAsync(AdbPath, args, onOutput, ct);
+    }
+
+    /// <summary>
+    /// adb yolunu doğrular. 'adb' gibi dizin içermeyen bir komut adı, PATH
+    /// üzerinden çözüleceği varsayımıyla kabul edilir (Process.Start, dizin
+    /// içermeyen FileName değerlerini PATH'te arar) — bu durumda File.Exists
+    /// kontrolü yapılmaz.
+    /// </summary>
+    internal static void ValidateAdbPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException("adb yolu ayarlanmamış.");
+
+        bool hasDirectory = path.IndexOfAny(new[]
+        {
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar
+        }) >= 0;
+
+        if (hasDirectory && !File.Exists(path))
+            throw new FileNotFoundException("adb bulunamadı: " + path, path);
     }
 
     // ================= Internals (testable) =================
